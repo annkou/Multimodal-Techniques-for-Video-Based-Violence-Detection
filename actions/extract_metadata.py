@@ -79,6 +79,7 @@ class VideoMetadataExtractor:
         frame_count = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv.CAP_PROP_FPS)
         duration = frame_count / fps if fps > 0 else 0
+        size = os.path.getsize(video_path)
         sr = None
         if self.has_audio(video_path):
             try:
@@ -91,4 +92,5 @@ class VideoMetadataExtractor:
             "fps": fps,
             "duration": duration,
             "audio_sr": sr,
+            "size": size,
         }
