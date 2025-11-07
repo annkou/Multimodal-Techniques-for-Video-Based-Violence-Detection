@@ -63,7 +63,7 @@ class CLIPModel:
         cap = cv.VideoCapture(video_path)
         fps = cap.get(cv.CAP_PROP_FPS)
         total_frames = int(cap.get(cv.CAP_PROP_FRAME_COUNT))
-        print(f"Total frames: {total_frames}")
+        # print(f"Total frames: {total_frames}")
         for i in range(0, total_frames, self.sample_rate):
             cap.set(cv.CAP_PROP_POS_FRAMES, i)
             ret, frame = cap.read()
@@ -121,14 +121,16 @@ class CLIPModel:
             end_time = round(frame_times[idx], 3)  # single frame, so start == end
             output.append(
                 {
-                    "video_path": os.path.basename(video_path),
                     "start_time": start_time,
                     "end_time": end_time,
-                    "modality": "vision",
                     "labels": label_probs_sorted,
                 }
             )
-        return output
+        return {
+            "video_path": os.path.basename(video_path),
+            "response": output,
+            "modality": "vision",
+        }
 
     async def process_all_videos(
         self,
@@ -160,7 +162,7 @@ class CLIPModel:
                 for video_path in video_paths
             ]
             for video_result in await asyncio.gather(*tasks):
-                results.extend(video_result)
+                results.append(video_result)
         # Save results to JSON
         if overwrite or not os.path.exists(output_json):
             with open(output_json, "w", encoding="utf-8") as f:
@@ -171,4 +173,4 @@ class CLIPModel:
             existing.extend(results)
             with open(output_json, "w", encoding="utf-8") as f:
                 json.dump(existing, f, indent=2)
-        return results
+        print(f"Processed {len(results)} videos")

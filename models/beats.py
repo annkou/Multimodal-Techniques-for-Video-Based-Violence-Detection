@@ -187,11 +187,16 @@ class BeatsModel:
             video_path: Path to video file.
             top_k: Number of top labels to retain per chunk.
         Returns:
-            List of result dicts per chunk.
+            Dict with video_path, response list, and modality.
         """
         if not self.has_audio(video_path):
             print(f"No audio stream found in {video_path}")
-            return []
+            return {
+                "video_path": os.path.basename(video_path),
+                "response": [],
+                "modality": "audio",
+                "error": "No audio stream found",
+            }
         # Extract audio
         wav = self.load_audio(video_path)
         chunks, masks, spans = self.chunk_waveform_with_spans(wav)
@@ -201,7 +206,12 @@ class BeatsModel:
         )  # This batching allows the model to process all chunks in parallel (efficient inference)
         if audio_input.shape[0] == 0:
             print(f"No valid audio chunks for {video_path}")
-            return []
+            return {
+                "video_path": os.path.basename(video_path),
+                "response": [],
+                "modality": "audio",
+                "error": "No valid audio chunks",
+            }
         # Pass padding_mask alongside audio_input_16khz
         # Internally, BEATs uses this mask to avoid attending to or aggregating padded positions, so the zero‑filled tail won’t affect predictions
         probs = self.model.extract_features(audio_input, padding_mask=padding_mask)[0]
@@ -219,10 +229,8 @@ class BeatsModel:
             start_time, end_time = spans[i]
             results.append(
                 {
-                    "video_path": os.path.basename(video_path),
                     "start_time": round(start_time, 3),
                     "end_time": round(end_time, 3),
-                    "modality": "audio",
                     "labels": dict(
                         sorted(
                             zip(top_labels, top_probs), key=lambda x: x[1], reverse=True
@@ -230,7 +238,11 @@ class BeatsModel:
                     ),
                 }
             )
-        return results
+        return {
+            "video_path": os.path.basename(video_path),
+            "response": results,
+            "modality": "audio",
+        }
 
     async def process_all_videos(
         self,
@@ -257,7 +269,7 @@ class BeatsModel:
                 for video_path in video_paths
             ]
             for video_result in await asyncio.gather(*tasks):
-                all_results.extend(video_result)
+                all_results.append(video_result)
         # Save results to JSON
         if overwrite or not os.path.exists(output_json):
             with open(output_json, "w", encoding="utf-8") as f:
@@ -268,4 +280,4 @@ class BeatsModel:
             existing.extend(all_results)
             with open(output_json, "w", encoding="utf-8") as f:
                 json.dump(existing, f, indent=2)
-        return all_results
+        print(f"Processed {len(all_results)} videos")

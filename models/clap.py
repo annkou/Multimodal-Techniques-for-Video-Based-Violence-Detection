@@ -113,26 +113,32 @@ class CLAPModel:
             labels: List of candidate label descriptions.
             top_k: Number of top labels.
         Returns:
-            List of result dicts per chunk.
+             Dict with video_path, response list, and modality.
         """
         if not self.has_audio(video_path):
             print(f"No audio stream found in {video_path}")
-            return []
+            return {
+                "video_path": os.path.basename(video_path),
+                "response": [],
+                "modality": "audio",
+            }
         audio = self.load_audio(video_path)
         probs_as_dict = self.chunk_and_embed_audio(audio, labels, top_k)
-        output = []
+        response = []
         for span, score_dict in probs_as_dict.items():
             start_time, end_time = span
-            output.append(
+            response.append(
                 {
-                    "video_path": os.path.basename(video_path),
                     "start_time": round(start_time, 3),
                     "end_time": round(end_time, 3),
-                    "modality": "audio",
                     "labels": score_dict,
                 }
             )
-        return output
+        return {
+            "video_path": os.path.basename(video_path),
+            "response": response,
+            "modality": "audio",
+        }
 
     async def process_all_videos(
         self,
@@ -164,7 +170,7 @@ class CLAPModel:
                 for video_path in video_paths
             ]
             for video_result in await asyncio.gather(*tasks):
-                results.extend(video_result)
+                results.append(video_result)
         # Save results to JSON
         if overwrite or not os.path.exists(output_json):
             with open(output_json, "w", encoding="utf-8") as f:
@@ -175,4 +181,4 @@ class CLAPModel:
             existing.extend(results)
             with open(output_json, "w", encoding="utf-8") as f:
                 json.dump(existing, f, indent=2)
-        return results
+        print(f"Processed {len(results)} videos")

@@ -96,8 +96,8 @@ class XCLIPVideoClassifier:
                 if isinstance(inputs[k], torch.Tensor):
                     inputs[k] = inputs[k].to(self.device)
             # forward pass
-            # with torch.no_grad():
-            outputs = self.model(**inputs)
+            with torch.no_grad():
+                outputs = self.model(**inputs)
             probs = outputs.logits_per_video.softmax(dim=1)
             # Sort labels by probability (descending) and keep top k
             label_probs = [
@@ -113,14 +113,16 @@ class XCLIPVideoClassifier:
             end_time = round(end_frame / fps, 3)
             all_results.append(
                 {
-                    "video_path": os.path.basename(video_path),
                     "start_time": start_time,
                     "end_time": end_time,
-                    "modality": "vision",
                     "labels": label_probs_sorted,
                 }
             )
-        return all_results
+        return {
+            "video_path": os.path.basename(video_path),
+            "response": all_results,
+            "modality": "vision",
+        }
 
     async def process_all_videos(
         self,
@@ -152,7 +154,7 @@ class XCLIPVideoClassifier:
                 for video_path in video_paths
             ]
             for video_result in await asyncio.gather(*tasks):
-                results.extend(video_result)
+                results.append(video_result)
         # Save results to JSON
         if overwrite or not os.path.exists(output_json):
             with open(output_json, "w", encoding="utf-8") as f:
@@ -163,4 +165,4 @@ class XCLIPVideoClassifier:
             existing.extend(results)
             with open(output_json, "w", encoding="utf-8") as f:
                 json.dump(existing, f, indent=2)
-        return results
+        print(f"Processed {len(results)} videos")
