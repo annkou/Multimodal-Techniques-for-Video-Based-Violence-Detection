@@ -1,0 +1,16 @@
+Provide a brief description of the key visual events in this video.
+
+Format the output as a JSON list, where each item contains:
+- start_time: Segment start in seconds (inclusive)
+- end_time: Segment end in seconds
+- visual_transcript: Description of the visual events in the segment
+
+Example:
+[
+  {
+    "start_time": 0.0,
+    "end_time": 5.0,
+    "visual_transcript": "A person enters the room and waves."
+  },
+  ...
+]
