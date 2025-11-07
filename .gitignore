@@ -211,3 +211,8 @@ __marimo__/
 **/videos/
 # Beats model checkpoint
 external/beats/*.pt
+
+service-account-key.json
+# Large data files
+data/results/
+data/metadata/video_metadata.csv
