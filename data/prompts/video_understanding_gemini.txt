@@ -1,0 +1,1 @@
+Transcribe the audio from this video, giving timestamps for salient events in the video. Also provide visual descriptions.
