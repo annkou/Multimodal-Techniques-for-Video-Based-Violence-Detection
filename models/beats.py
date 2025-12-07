@@ -212,9 +212,16 @@ class BeatsModel:
                 "modality": "audio",
                 "error": "No valid audio chunks",
             }
-        # Pass padding_mask alongside audio_input_16khz
-        # Internally, BEATs uses this mask to avoid attending to or aggregating padded positions, so the zero‑filled tail won’t affect predictions
-        probs = self.model.extract_features(audio_input, padding_mask=padding_mask)[0]
+        
+        # Move tensors to the same device as the model
+        audio_input = audio_input.to(self.device)
+        padding_mask = padding_mask.to(self.device)
+        # Run inference
+        with torch.no_grad():
+            # Pass padding_mask alongside audio_input_16khz
+            # Internally, BEATs uses this mask to avoid attending to or aggregating padded positions, so the zero‑filled tail won’t affect predictions
+            probs = self.model.extract_features(audio_input, padding_mask=padding_mask)[0]
+            
         results = []
         for i, (top_label_prob, top_label_idx) in enumerate(zip(*probs.topk(k=top_k))):
             # Get human-readable labels
@@ -261,23 +268,45 @@ class BeatsModel:
         Returns:
             List of all result dicts.
         """
-        loop = asyncio.get_event_loop()
-        all_results = []
-        with ThreadPoolExecutor() as executor:
-            tasks = [
-                loop.run_in_executor(executor, self.process_video, video_path, top_k)
-                for video_path in video_paths
-            ]
-            for video_result in await asyncio.gather(*tasks):
-                all_results.append(video_result)
-        # Save results to JSON
+        # Load existing results if not overwriting
         if overwrite or not os.path.exists(output_json):
-            with open(output_json, "w", encoding="utf-8") as f:
-                json.dump(all_results, f, indent=2)
+            all_results = []
         else:
             with open(output_json, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-            existing.extend(all_results)
-            with open(output_json, "w", encoding="utf-8") as f:
-                json.dump(existing, f, indent=2)
+                all_results = json.load(f)
+            print(f"Loaded {len(all_results)} existing results")
+        
+        print(f"Processing {len(video_paths)} new videos...")
+        # Process each video sequentially
+        for i, video_path in enumerate(video_paths, 1):
+            video_name = os.path.basename(video_path)
+            print(f"\n[{i}/{len(video_paths)}] Processing: {video_name}")
+            
+            try:
+                # Process single video
+                result = self.process_video(video_path, top_k)
+                all_results.append(result)
+                
+                # Save after each video
+                with open(output_json, "w", encoding="utf-8") as f:
+                    json.dump(all_results, f, indent=2)
+                
+                # Clear GPU cache after each video
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+            except Exception as e:
+                print(f"Error processing {video_name}: {e}")
+                # Save error result
+                error_result = {
+                    "video_path": video_name,
+                    "response": [],
+                    "modality": "audio",
+                    "error": str(e)
+                }
+                all_results.append(error_result)
+                
+                # Save even on error
+                with open(output_json, "w", encoding="utf-8") as f:
+                    json.dump(all_results, f, indent=2)
+
         print(f"Processed {len(all_results)} videos")
