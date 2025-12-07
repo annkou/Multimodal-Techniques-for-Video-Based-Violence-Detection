@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 import librosa
-import nemo.collections.asr as nemo_asr
+# import nemo.collections.asr as nemo_asr
 import numpy as np
 import soundfile as sf
 import torch
