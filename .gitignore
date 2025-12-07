@@ -216,3 +216,7 @@ service-account-key.json
 # Large data files
 data/results/
 data/metadata/video_metadata.csv
+# Third prompt attempt (not useful)
+data/prompts/llm_judge_qwen3.txt
+# Screenshot images
+Screenshots/
