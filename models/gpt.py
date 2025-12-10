@@ -9,7 +9,7 @@ from tenacity import retry, stop_after_attempt, wait_fixed, wait_random_exponent
 
 
 class ViolenceEval(BaseModel):
-    video_path: str
+    video_name: str
     violence_probability: float = Field(ge=0.0, le=1.0)
     confidence: float = Field(ge=0.0, le=1.0)  # model’s self-reported certainty
     abstain: bool = False  # True if evidence insufficient
@@ -54,37 +54,37 @@ class GPTViolenceEvaluator:
             "currency": self.MODEL_COSTS[model_name]["currency"],
         }
 
-    def build_user_prompt_for_video(self, video_path: str, model_files: dict):
+    def build_user_prompt_for_video(
+            self, 
+            video_name: str, 
+            video_results: dict,
+            models_to_include: list = None
+        ):
         """
-        Gather all model results for a specific video.
+        Build user prompt from filtered model results for a specific video.
 
         Args:
-            video_path (str): Path to the video file.
-            model_files (dict): Mapping of model names to their results.json file paths.
+            video_name: Name of the video file
+            video_results: Dict with structure {model_name: {'response': [...], 'modality': '...'}}
+            models_to_include: List of model names to include (if None, include all)
 
         Returns:
             dict: {model_name: [results_for_this_video]}
         """
-        basename = os.path.basename(video_path)
         prompt_data = {}
+        # If no specific models requested, include all
+        if models_to_include is None:
+            models_to_include = list(video_results.keys())
 
-        for model_name, json_path in model_files.items():
-            if not os.path.exists(json_path):
-                print(f"Warning: {json_path} not found, skipping {model_name}")
-                continue
-
-            with open(json_path, "r", encoding="utf-8") as f:
-                all_results = json.load(f)
-
-            # Filter results for this video only
-            video_results = [
-                r
-                for r in all_results
-                if r.get("video_path") == basename
-                or r.get("video_url", "").endswith(basename)
-            ]
-            prompt_data[model_name] = video_results
-
+        # Filter and format results for requested models
+        for model_name in models_to_include:
+            if model_name in video_results:
+                model_data = video_results[model_name]
+                prompt_data[model_name] = {
+                    "response": model_data.get('response', []),
+                    "modality": model_data.get('modality', 'unknown')
+                }
+        
         return prompt_data
 
     def create_prompt(
@@ -162,7 +162,7 @@ class GPTViolenceEvaluator:
         response = await self.client.chat.completions.parse(
             model=self.model,
             messages=prompt,
-            temperature=0,
+            # temperature=0,
             max_completion_tokens=30000,
             response_format=response_format_schema,
         )
@@ -171,26 +171,29 @@ class GPTViolenceEvaluator:
 
     async def process_video(
         self,
-        video_path: str,
-        model_files: dict,
+        video_name: str,
+        video_results: dict,
         system_prompt: str,
-        file_id: str = None,
+        models_to_include: list = None,
     ):
         """
         Process a single video using standard API calls.
 
         Args:
-            video_path: Path to video file
-            model_files: Dict of model_name -> results.json path
+            video_name: Name of the video
+            video_results: Dict with structure {model_name: {'response': [...], 'modality': '...'}}
             system_prompt: System instructions
-            response_format_schema: Pydantic schema for response
-            file_id: Optional uploaded file ID
+            models_to_include: List of model names to include (if None, include all)
 
         Returns:
-            dict: Result with video_path, response, cost info
+            dict: Result with video_name, response, cost info
         """
-        # Build user prompt from all model results
-        user_prompt_data = self.build_user_prompt_for_video(video_path, model_files)
+        # Build user prompt from filtered model results
+        user_prompt_data = self.build_user_prompt_for_video(
+            video_name,
+            video_results,
+            models_to_include
+        )
         user_prompt = json.dumps(user_prompt_data, ensure_ascii=False, indent=2)
         prompt = self.create_prompt(system_prompt, user_prompt)
 
@@ -203,7 +206,7 @@ class GPTViolenceEvaluator:
             result_content = response_dict["choices"][0]["message"]["content"]
             result_dict = json.loads(result_content)
         except Exception as e:
-            print(f"Error parsing response for {video_path}: {e}")
+            print(f"Error parsing response for {video_name}: {e}")
             result_dict = {"error": str(e)}
 
         # Calculate cost
@@ -214,7 +217,7 @@ class GPTViolenceEvaluator:
 
         # Build final result
         final_result = {
-            "video_path": os.path.basename(video_path),
+            "video_name": video_name,
             "response": result_dict,
             "prompt_tokens": usage["prompt_tokens"],
             "completion_tokens": usage["completion_tokens"],
@@ -225,11 +228,10 @@ class GPTViolenceEvaluator:
 
     async def process_all_videos(
         self,
-        video_paths: list,
-        model_files: dict,
+        video_results: dict,
         system_prompt: str,
         output_json: str,
-        # file_id: str = None,
+        models_to_include: list = None,
         batch_size: int = 10,
         overwrite: bool = False,
         append: bool = True,
@@ -238,11 +240,10 @@ class GPTViolenceEvaluator:
         Process all videos using standard API calls (async).
 
         Args:
-            video_paths: List of video file paths
-            model_files: Dict of model_name -> results.json path
+            video_results: Dict mapping video_name -> {model_name: {'response': [...], 'modality': '...'}}
             system_prompt: System prompt
             output_json: Output JSON file path
-            # file_id: Optional uploaded file ID
+            models_to_include: List of model names to include (if None, include all)
             batch_size: Number of concurrent API calls
             overwrite: If True, delete existing output file
             append: If True, append to existing results
@@ -260,13 +261,13 @@ class GPTViolenceEvaluator:
             with open(output_json, "r", encoding="utf-8") as f:
                 try:
                     existing = json.load(f)
-                    processed_videos = {r["video_path"] for r in existing}
+                    processed_videos = {r["video_name"] for r in existing}
                 except:
                     pass
 
         # Filter out already processed videos
         videos_to_process = [
-            v for v in video_paths if os.path.basename(v) not in processed_videos
+            v for v in video_results.keys() if v not in processed_videos
         ]
 
         print(
@@ -276,18 +277,19 @@ class GPTViolenceEvaluator:
         # Process with semaphore for rate limiting
         semaphore = asyncio.Semaphore(batch_size)
 
-        async def process_with_limit(video_path):
+        async def process_with_limit(video_name):
             async with semaphore:
                 result = await self.process_video(
-                    video_path,
-                    model_files,
+                    video_name,
+                    video_results[video_name],
                     system_prompt,
+                    models_to_include,
                 )
                 # Save immediately after each video
                 self.save_results_to_json([result], output_json)
                 return result
 
-        tasks = [process_with_limit(vp) for vp in videos_to_process]
+        tasks = [process_with_limit(vn) for vn in videos_to_process]
         results = await asyncio.gather(*tasks)
 
         print(f"All videos processed. Results saved to {output_json}")
@@ -296,49 +298,51 @@ class GPTViolenceEvaluator:
     # ==================== BATCH API MODE ====================
     def create_batch_requests(
         self,
-        video_paths: list,
-        model_files: dict,
+        video_results: dict,
         system_prompt: str,
+        models_to_include: list = None
     ):
         """
         Create batch API request objects for all videos.
 
         Args:
-            video_paths: List of video file paths
-            model_files: Dict of model_name -> results.json path
+            video_results: Dict with {model_name: {'response': [...], 'modality': '...'}}
             system_prompt: System instructions
+            models_to_include: List of models to include in prompt
 
         Returns:
             list: List of batch request dicts
         """
         batch_requests = []
 
-        for idx, video_path in enumerate(video_paths):
-            user_prompt_data = self.build_user_prompt_for_video(video_path, model_files)
+        for idx, (video_name, models_data) in enumerate(video_results.items()):
+            # Build user prompt with filtered models
+            user_prompt_data = self.build_user_prompt_for_video(
+                video_name, 
+                models_data,
+                models_to_include
+            )
             user_prompt = json.dumps(user_prompt_data, ensure_ascii=False, indent=2)
             prompt = self.create_prompt(system_prompt, user_prompt)
 
             response_format_schema = (ViolenceEval).model_json_schema()
             # Create batch request format
             request = {
-                "custom_id": f"video-{idx}-{os.path.basename(video_path)}",
+                "custom_id": f"video-{idx}-{video_name}",
                 "method": "POST",
                 "url": "/v1/chat/completions",
                 "body": {
-                    "model": self.model_name,
+                    "model": self.model,
                     "messages": prompt,
                     # "temperature": self.temperature,
                     "max_completion_tokens": 30000,
-                    "response_format": response_format_schema
-                    if response_format_schema
-                    else None,
-                    # "response_format": {
-                    #     "type": "json_schema",
-                    #     "json_schema": {
-                    #         "name": "whocares",
-                    #         "schema": response_format_schema,
-                    #     },
-                    # },
+                    "response_format": {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "violence-detection",
+                            "schema": response_format_schema,
+                        },
+                    },
                 },
             }
             batch_requests.append(request)
@@ -346,19 +350,19 @@ class GPTViolenceEvaluator:
 
     def create_batch_input_file(
         self,
-        video_paths: list,
-        model_files: dict,
+        video_results: dict,
         system_prompt: str,
         output_file: str = "batch_input.jsonl",
+        models_to_include: list = None
     ):
         """
         Create a JSONL file for batch API input.
 
         Args:
-            video_paths: List of video file paths
-            model_files: Dict of model_name -> results.json path
+            video_results: Dict mapping video_name -> {model_name: {'response': [...], 'modality': '...'}}
             system_prompt: System prompt
             output_file: Path to output JSONL file
+            models_to_include: List of model names to include (if None, include all)
 
         Returns:
             str: Path to created JSONL file
@@ -366,9 +370,9 @@ class GPTViolenceEvaluator:
 
         # Create batch requests
         batch_requests = self.create_batch_requests(
-            video_paths,
-            model_files,
+            video_results,
             system_prompt,
+            models_to_include
         )
 
         # Write to JSONL

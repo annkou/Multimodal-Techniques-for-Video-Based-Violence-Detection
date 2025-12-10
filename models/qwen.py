@@ -45,6 +45,7 @@ class QwenAsyncRequester:
                 "currency": "USD",
             },
             "qwen2.5-vl-72b-instruct": {"input": 2.8, "output": 8.4, "currency": "USD"},
+            "qwen3-30b-a3b-thinking-2507": {"input": 0.2, "output": 2.4, "currency": "USD"},
             # Add more models here as needed
         }
 

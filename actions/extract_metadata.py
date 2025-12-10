@@ -39,13 +39,12 @@ class VideoMetadataExtractor:
         """
         metadata = {
             "video_path": video_path,
-            "video_name": os.path.basename(video_path),
+            "video_name": os.path.splitext(os.path.basename(video_path))[0],
             "has_audio": self.has_audio(video_path),
         }
         details = self.get_video_details(video_path)
         metadata.update(details)
-        # TODO: label extraction
-        metadata["label"] = None
+        # print(f"\nProcessed {os.path.basename(video_path)}")
         return metadata
 
     def has_audio(self, video_path: str) -> bool:
@@ -80,6 +79,7 @@ class VideoMetadataExtractor:
         fps = cap.get(cv.CAP_PROP_FPS)
         duration = frame_count / fps if fps > 0 else 0
         size = os.path.getsize(video_path)
+        size_mb = round(size / (1024 * 1024), 2)  # Convert bytes to MB
         sr = None
         if self.has_audio(video_path):
             try:
@@ -92,5 +92,6 @@ class VideoMetadataExtractor:
             "fps": fps,
             "duration": duration,
             "audio_sr": sr,
-            "size": size,
+            "size_bytes": size,
+            "size_mb": size_mb,
         }

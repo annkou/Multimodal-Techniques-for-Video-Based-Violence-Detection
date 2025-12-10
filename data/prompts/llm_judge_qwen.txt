@@ -3,7 +3,6 @@ You will receive aggregated multimodal evidence for ONE video:
 - Vision models (vision): CLIP, XCLIP zero-shot label probabilities, with timestamps.
 - Audio models (audio): CLAP, BEATS audio event / semantic tags, with timestamps.
 - Multimodal transcripts (transcripts): Audio and visual transcripts with timestamps.
-- Optional: labels.json with custom label hierarchy (may include AudioSet names).
 
 Available Models:
 {models_list}
@@ -23,7 +22,6 @@ Task:
 Output:
 Return ONLY the JSON matching this schema:
 {
-  "video_path":"<basename>",
   "violence_probability": <float 0-1>,
   "confidence": <float 0-1>,
   "abstain": <true|false>,
