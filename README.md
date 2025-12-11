@@ -242,7 +242,7 @@ The project provides Jupyter notebooks for different stages of the violence dete
 | Vision | X-CLIP | Video | Video-level classification |
 | Audio | CLAP | Audio + Text | Audio-text similarity |
 | Audio | BEATs | Audio | Audio event detection |
-| Multimodal LLM | Gemini 2.0 | Video + Audio + Text | Video understanding |
+| Multimodal LLM | Gemini 2.5 | Video + Audio + Text | Video understanding |
 | Multimodal LLM | Qwen-VL | Video + Audio + Text | Video analysis |
 | Speech | Whisper | Audio | Speech-to-text |
 | Judge | GPT-5 / Qwen | Text | Result evaluation |
